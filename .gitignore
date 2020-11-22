@@ -105,3 +105,8 @@ venv.bak/
 
 # mac os
 __MACOSX/
+
+runs/
+checkpoints/
+run/
+.vscode/
