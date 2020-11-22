@@ -11,7 +11,10 @@ def _set_batch_norm_attr(named_modules, attr, value):
             setattr(m[1], attr, value)
 
 
-def _get_paramters(model):
+def _get_paramters(model,arch=False):
+    if arch:
+        return model.arch_parameters()
+    
     params_list = list()
     if hasattr(model, 'encoder') and model.encoder is not None and hasattr(model, 'decoder'):
         params_list.append({'params': model.encoder.parameters(), 'lr': cfg.SOLVER.LR})
@@ -62,5 +65,18 @@ def get_optimizer(model):
     else:
         raise ValueError("Expected optimizer method in [sgd, adam, adadelta, rmsprop], but received "
                          "{}".format(opt_lower))
+
+    return optimizer
+
+def get_arch_optimizer(model):
+    parameters = _get_paramters(model,True)
+    opt_lower = cfg.SOLVER.OPTIMIZER.lower()
+
+    if opt_lower == 'sgd':
+        optimizer = optim.SGD(
+            parameters, lr=cfg.ARCH.LR, momentum=cfg.SOLVER.MOMENTUM, weight_decay=cfg.ARCH.WEIGHT_DECAY)
+    else:
+        optimizer = optim.Adam(
+            parameters, lr=cfg.ARCH.LR, betas=(0.5, 0.999), weight_decay=cfg.ARCH.WEIGHT_DECAY)
 
     return optimizer

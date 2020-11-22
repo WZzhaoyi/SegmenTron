@@ -1,9 +1,11 @@
 import logging
 import torch
+import numpy as np
 
 from collections import OrderedDict
 from segmentron.utils.registry import Registry
 from ..config import cfg
+from ..core.models import GeneralizedMTLNASNet
 
 MODEL_REGISTRY = Registry("MODEL")
 MODEL_REGISTRY.__doc__ = """
@@ -23,6 +25,14 @@ def get_segmentation_model():
     load_model_pretrain(model)
     return model
 
+def get_supernet():
+    model_name = cfg.MODEL.MODEL_NAME
+    if cfg.ARCH.SEARCHSPACE == 'GeneralizedMTLNAS' and model_name == 'FastSCNN':
+        connectivity = feature_fusion_connectivity()
+        model = GeneralizedMTLNASNet(cfg, net1, net2, net1_connectivity_matrix=connectivity(), net2_connectivity_matrix=connectivity())
+        return model
+    else:
+        return NotImplementedError
 
 def load_model_pretrain(model):
     if cfg.PHASE == 'train':
@@ -45,3 +55,24 @@ def load_model_pretrain(model):
             logging.info('load test model from {}'.format(cfg.TEST.TEST_MODEL_PATH))
             msg = model.load_state_dict(torch.load(cfg.TEST.TEST_MODEL_PATH), strict=False)
             logging.info(msg)
+
+def depth_limited_connectivity_matrix(stage_config, limit=3):
+    """
+
+    :param stage_config: list of number of layers in each stage
+    :param limit: limit of depth difference between connected layers, pass in -1 to disable
+    :return: connectivity matrix
+    """
+    network_depth = np.sum(stage_config)
+    stage_depths = np.cumsum([0] + stage_config)
+    matrix = np.zeros((network_depth, network_depth)).astype('int')
+    for i in range(network_depth):
+        j_limit = stage_depths[np.argmax(stage_depths > i) - 1]
+        for j in range(network_depth):
+            if j <= i and i - j < limit and j >= j_limit:
+                matrix[i, j] = 1.
+    return matrix
+
+
+def feature_fusion_connectivity():
+    return depth_limited_connectivity_matrix([3])

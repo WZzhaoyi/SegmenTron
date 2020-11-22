@@ -18,8 +18,8 @@ from torchvision import transforms
 from segmentron.data.dataloader import get_segmentation_dataset
 from segmentron.models.model_zoo import get_segmentation_model
 from segmentron.solver.loss import get_segmentation_loss
-from segmentron.solver.optimizer import get_optimizer
-from segmentron.solver.lr_scheduler import get_scheduler
+from segmentron.solver.optimizer import get_optimizer, get_arch_optimizer
+from segmentron.solver.lr_scheduler import get_scheduler, get_arch_scheduler
 from segmentron.utils.distributed import *
 from segmentron.utils.score import SegmentationMetric
 from segmentron.utils.filesystem import save_checkpoint
@@ -85,9 +85,12 @@ class Trainer(object):
 
         # optimizer, for model just includes encoder, decoder(head and auxlayer).
         self.optimizer = get_optimizer(self.model)
+        self.arch_optimizer = get_arch_optimizer(self)
 
         # lr scheduling
         self.lr_scheduler = get_scheduler(self.optimizer, max_iters=self.max_iters,
+                                          iters_per_epoch=self.iters_per_epoch)
+        self.arch_lr_scheduler = get_arch_scheduler(self.arch_optimizer, max_iters=self.max_iters,
                                           iters_per_epoch=self.iters_per_epoch)
 
         # resume checkpoint if needed

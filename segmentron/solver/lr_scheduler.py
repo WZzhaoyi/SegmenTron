@@ -2,6 +2,7 @@
 from __future__ import division
 import math
 import torch
+from torch import optim as optim
 
 from typing import List
 from bisect import bisect_right
@@ -159,6 +160,30 @@ def get_scheduler(optimizer, max_iters, iters_per_epoch):
     elif mode == 'step':
         milestones = [x * iters_per_epoch for x in cfg.SOLVER.STEP.DECAY_EPOCH]
         return WarmupMultiStepLR(optimizer, milestones=milestones, gamma=cfg.SOLVER.STEP.GAMMA,
+                                 warmup_factor=cfg.SOLVER.WARMUP.FACTOR, warmup_iters=warm_up_iters,
+                                 warmup_method=cfg.SOLVER.WARMUP.METHOD)
+    else:
+        raise ValueError("not support lr scheduler method!")
+
+
+def get_arch_scheduler(arch_optimizer, max_iters, iters_per_epoch):
+    mode = cfg.SOLVER.LR_SCHEDULER.lower()
+    warm_up_iters = iters_per_epoch * cfg.SOLVER.WARMUP.EPOCHS
+    if mode == 'poly':
+        if cfg.TRAIN.WARMUP > 0.:
+            return optim.lr_scheduler.LambdaLR(arch_optimizer,
+                                                    lambda step: min(1., float(step) / cfg.TRAIN.WARMUP) * (1 - float(step) / cfg.TRAIN.EPOCHS) ** cfg.SOLVER.POLY.POWER,
+                                                    last_epoch=-1)
+        else:
+            return optim.lr_scheduler.LambdaLR(arch_optimizer,
+                                                    lambda step: (1 - float(step) / cfg.TRAIN.EPOCHS) ** cfg.SOLVER.POLY.POWER,
+                                                    last_epoch=-1)
+    elif mode == 'cosine':
+        return WarmupCosineLR(arch_optimizer, max_iters=max_iters, warmup_factor=cfg.SOLVER.WARMUP.FACTOR,
+                              warmup_iters=warm_up_iters, warmup_method=cfg.SOLVER.WARMUP.METHOD)
+    elif mode == 'step':
+        milestones = [x * iters_per_epoch for x in cfg.SOLVER.STEP.DECAY_EPOCH]
+        return WarmupMultiStepLR(arch_optimizer, milestones=milestones, gamma=cfg.SOLVER.STEP.GAMMA,
                                  warmup_factor=cfg.SOLVER.WARMUP.FACTOR, warmup_iters=warm_up_iters,
                                  warmup_method=cfg.SOLVER.WARMUP.METHOD)
     else:

@@ -59,6 +59,33 @@ cfg.TRAIN.RESUME_MODEL_PATH = ''
 cfg.TRAIN.SYNC_BATCH_NORM = True
 # save model every checkpoint-epoch
 cfg.TRAIN.SNAPSHOT_EPOCH = 10
+########################### architecture search config ##################################
+# cfg.ARCH = CN()
+cfg.ARCH.SEARCHSPACE = 'GeneralizedMTLNAS' # Run nddr when this is empty
+cfg.ARCH.TRAIN_SPLIT = 0.5  # portion of the original training data to keep, with the rest being used for nas
+cfg.ARCH.MIXED_DATA = True
+# Optimization
+cfg.ARCH.OPTIMIZER = ''
+cfg.ARCH.LR = 0.001
+cfg.ARCH.WEIGHT_DECAY = 1e-3
+# For Gumbel Softmax on model connections
+cfg.ARCH.INIT_TEMP = 1.
+cfg.ARCH.TEMPERATURE_POWER = 2.
+cfg.ARCH.TEMPERATURE_PERIOD = (0., 1.)
+# For regularization
+cfg.ARCH.ENTROPY_REGULARIZATION = True
+cfg.ARCH.ENTROPY_PERIOD = (0.0, 0.0)  # proportion of training with regularization
+cfg.ARCH.ENTROPY_REGULARIZATION_WEIGHT = 10.  # 10. or 50.
+cfg.ARCH.L1_REGULARIZATION = False
+cfg.ARCH.L1_OFF = False  # turn off l1 after certain period
+cfg.ARCH.WEIGHTED_L1 = False
+cfg.ARCH.L1_PERIOD = (0., 1.)
+cfg.ARCH.L1_REGULARIZATION_WEIGHT = 5.
+# Feedforward hard vs. soft options
+cfg.ARCH.HARD_WEIGHT_TRAINING = True  # use gumbel trick for feedforward
+cfg.ARCH.HARD_ARCH_TRAINING = False  # use gumbel trick for feedforward
+cfg.ARCH.HARD_EVAL = True  # whether to only take most likely operation during test time
+cfg.ARCH.STOCHASTIC_EVAL = False  # for SNAS eval
 
 ########################### optimizer config ##################################
 # base learning rate
