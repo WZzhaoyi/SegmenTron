@@ -5,7 +5,9 @@ import numpy as np
 from collections import OrderedDict
 from segmentron.utils.registry import Registry
 from ..config import cfg
-from ..core.models import GeneralizedMTLNASNet
+from ..core.models import GeneralizedFastSCNNNet
+from fast_scnn import FastSCNNBranch
+from ..core.models.fusion_net import get_fusion_net
 
 MODEL_REGISTRY = Registry("MODEL")
 MODEL_REGISTRY.__doc__ = """
@@ -27,9 +29,11 @@ def get_segmentation_model():
 
 def get_supernet():
     model_name = cfg.MODEL.MODEL_NAME
-    if cfg.ARCH.SEARCHSPACE == 'GeneralizedMTLNAS' and model_name == 'FastSCNN':
+    if cfg.ARCH.SEARCHSPACE == 'GeneralizedFastSCNN' and model_name == 'FastSCNN':
         connectivity = feature_fusion_connectivity()
-        model = GeneralizedMTLNASNet(cfg, net1, net2, net1_connectivity_matrix=connectivity(), net2_connectivity_matrix=connectivity())
+        fusion_net = get_fusion_net()
+        net1_net2_factor = cfg.MODEL.MODEL_FACTOR
+        model = GeneralizedFastSCNNNet(cfg, FastSCNNBranch, fusion_net, net1_connectivity_matrix=connectivity(), net2_connectivity_matrix=connectivity(), net1_net2_factor=net1_net2_factor)
         return model
     else:
         return NotImplementedError

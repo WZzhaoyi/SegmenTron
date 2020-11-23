@@ -8,6 +8,8 @@ cur_path = os.path.abspath(os.path.dirname(__file__))
 root_path = os.path.split(cur_path)[0]
 sys.path.append(root_path)
 
+import random
+import numpy as np
 import logging
 import torch
 import torch.nn as nn
@@ -16,7 +18,7 @@ import torch.nn.functional as F
 
 from torchvision import transforms
 from segmentron.data.dataloader import get_segmentation_dataset
-from segmentron.models.model_zoo import get_segmentation_model
+from segmentron.models.model_zoo import get_supernet
 from segmentron.solver.loss import get_segmentation_loss
 from segmentron.solver.optimizer import get_optimizer, get_arch_optimizer
 from segmentron.solver.lr_scheduler import get_scheduler, get_arch_scheduler
@@ -27,6 +29,7 @@ from segmentron.utils.options import parse_args
 from segmentron.utils.default_setup import default_setup
 from segmentron.utils.visualize import show_flops_params
 from segmentron.config import cfg
+from tensorboardX import SummaryWriter
 
 class Trainer(object):
     def __init__(self, args):
@@ -61,7 +64,7 @@ class Trainer(object):
                                           pin_memory=True)
 
         # create network
-        self.model = get_segmentation_model().to(self.device)
+        self.model = get_supernet().to(self.device)
         
         # print params and flops
         if get_rank() == 0:
@@ -148,18 +151,21 @@ class Trainer(object):
                 self.model.arch_train()
                 assert self.model.arch_training
                 self.arch_optimizer.zero_grad()
-                arch_outputs = self.model(image_search)
-                arch_loss_dict = self.criterion(arch_outputs, targets_search)
+                arch_loss_dict = self.model.loss(image_search, targets_search)
                 losses = sum(loss for loss in arch_loss_dict.values())
 
                 loss_dict_reduced = reduce_loss_dict(arch_loss_dict)
-                losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+                arch_losses_reduced = sum(loss for loss in loss_dict_reduced.values())
 
                 self.arch_optimizer.zero_grad()
                 losses.backward()
                 self.arch_optimizer.step()
-                self.arch_lr_scheduler.step()
+                # self.arch_lr_scheduler.step()
+                self.model.arch_eval()
+            else:
+                arch_losses_reduced = 0
 
+            assert not self.model.arch_training
             images = images.to(self.device)
             targets = targets.to(self.device)
 
@@ -175,7 +181,11 @@ class Trainer(object):
             self.optimizer.zero_grad()
             losses.backward()
             self.optimizer.step()
+            if cfg.ARCH.SEARCHSPACE == 'GeneralizedFastSCNN':
+                self.model.step()
             self.lr_scheduler.step()
+            if cfg.ARCH.OPTIMIZER == 'sgd':
+                self.arch_lr_scheduler.step()
 
             eta_seconds = ((time.time() - start_time) / iteration) * (max_iters - iteration)
             eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
@@ -183,14 +193,14 @@ class Trainer(object):
             if iteration % log_per_iters == 0 and self.save_to_disk:
                 logging.info(
                     "Epoch: {:d}/{:d} || Iters: {:d}/{:d} || Lr: {:.6f} || "
-                    "Loss: {:.4f} || Cost Time: {} || Estimated Time: {}".format(
+                    "Loss: {:.4f}/{:.4f} || Cost Time: {} || Estimated Time: {}".format(
                         epoch, epochs, iteration % iters_per_epoch, iters_per_epoch,
-                        self.optimizer.param_groups[0]['lr'], losses_reduced.item(),
+                        self.optimizer.param_groups[0]['lr'], losses_reduced.item(), arch_losses_reduced.item(),
                         str(datetime.timedelta(seconds=int(time.time() - start_time))),
                         eta_string))
 
             if iteration % self.iters_per_epoch == 0 and self.save_to_disk:
-                save_checkpoint(self.model, epoch, self.optimizer, self.lr_scheduler, is_best=False)
+                save_checkpoint(self.model, epoch, self.optimizer, self.arch_optimizer, self.lr_scheduler, self.arch_lr_scheduler, is_best=False)
 
             if not self.args.skip_val and iteration % val_per_iters == 0:
                 self.validation(epoch)
@@ -248,6 +258,14 @@ if __name__ == '__main__':
 
     # setup python train environment, logger, seed..
     default_setup(args)
+    os.environ['PYTHONHASHSEED'] = str(cfg.SEED)
+    random.seed(cfg.SEED)
+    np.random.seed(cfg.SEED)
+    torch.manual_seed(cfg.SEED)
+    torch.cuda.manual_seed(cfg.SEED)
+    torch.cuda.manual_seed_all(cfg.SEED)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False  # This can slow down training
 
     # create a trainer and start train
     trainer = Trainer(args)

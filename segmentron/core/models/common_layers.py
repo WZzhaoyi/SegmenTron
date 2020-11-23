@@ -30,7 +30,7 @@ def get_nddr_bn(cfg):
         raise NotImplementedError
         
 
-def get_nddr(cfg, in_channels, out_channels):
+def get_nddr(cfg, in_channels, out_channels, factor = 1):
     
     if cfg.ARCH.SEARCHSPACE == '':
         assert in_channels == out_channels
@@ -51,6 +51,8 @@ def get_nddr(cfg, in_channels, out_channels):
             return SingleSidedAsymmetricCrossStitch(cfg, in_channels, out_channels)
         else:
             raise NotImplementedError
+    elif cfg.ARCH.SEARCHSPACE == 'GeneralizedFastSCNN':
+        return SingleSidedAsymmetricFeatureFusion(cfg, in_channels, out_channels, factor)
     else:
         raise NotImplementedError
 
@@ -210,3 +212,55 @@ class SingleSidedAsymmetricNDDR(nn.Module):
         out = self.bn(out)
         out = self.activation(out)
         return out
+
+class SingleSidedAsymmetricFeatureFusion(nn.Module):
+    def __init__(self, cfg, in_channels, out_channels, factor):
+        super(SingleSidedAsymmetricNDDR, self).__init__()
+        init_weights = cfg.MODEL.INIT
+        norm = get_nddr_bn(cfg)
+        self.factor = factor
+        
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        assert in_channels >= out_channels
+        # check if out_channel divides in_channels
+        assert in_channels % out_channels == 0
+        multipiler = in_channels / out_channels - 1
+        
+        # Initialize weight
+        if len(init_weights):
+            weight = [torch.eye(out_channels) * init_weights[0]] +\
+                 [torch.eye(out_channels) * init_weights[1] / float(multipiler) for _ in range(int(multipiler))]
+            self.conv.weight = nn.Parameter(torch.cat(weight, dim=1).view(out_channels, -1, 1, 1))
+        else:
+            nn.init.kaiming_normal_(self.conv.weight, mode='fan_out', nonlinearity='relu')
+        
+        self.activation = Swish()
+        self.bn = norm(out_channels)
+        nn.init.constant_(self.bn.weight, 1.)
+        nn.init.constant_(self.bn.bias, 0)
+
+    def forward(self, features):
+        """
+
+        :param features: upstream feature maps
+        :return:
+        """
+        x = torch.cat(features, 1)
+        if self.factor != 1:
+            x = F.interpolate(x, scale_factor=self.factor, mode= 'bilinear')
+        out = self.conv(x)
+        out = self.bn(out)
+        out = self.activation(out)
+        return out
+
+
+class Swish(nn.Module):
+    def __init__(self, inplace=False):
+        super(Swish, self).__init__()
+        self.inplace = inplace
+
+    def forward(self, x):
+        if self.inplace:
+            return x.mul_(x.sigmoid())
+        else:
+            return x * x.sigmoid()

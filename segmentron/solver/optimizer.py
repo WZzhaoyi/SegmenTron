@@ -13,7 +13,32 @@ def _set_batch_norm_attr(named_modules, attr, value):
 
 def _get_paramters(model,arch=False):
     if arch:
-        return model.arch_parameters()
+        nddr_params = []
+        fc8_weights = []
+        fc8_bias = []
+        base_params = []
+        for k, v in model.named_net_parameters():
+            if 'paths' in k:
+                nddr_params.append(v)
+            # elif model.net1.fc_id in k:
+            #     if 'weight' in k:
+            #         fc8_weights.append(v)
+            #     else:
+            #         assert 'bias' in k
+            #         fc8_bias.append(v)
+            else:
+                assert 'alpha' not in k
+                base_params.append(v)
+        # assert len(fc8_weights) > 0
+        assert len(nddr_params) > 0 and len(fc8_bias) > 0
+
+        parameter_dict = [
+            {'params': base_params},
+            {'params': fc8_weights, 'lr': cfg.TRAIN.LR * cfg.TRAIN.FC8_WEIGHT_FACTOR},
+            {'params': fc8_bias, 'lr': cfg.TRAIN.LR * cfg.TRAIN.FC8_BIAS_FACTOR},
+            {'params': nddr_params, 'lr': cfg.TRAIN.LR * cfg.TRAIN.NDDR_FACTOR}
+        ]
+        return parameter_dict
     
     params_list = list()
     if hasattr(model, 'encoder') and model.encoder is not None and hasattr(model, 'decoder'):
@@ -46,7 +71,7 @@ def _get_paramters(model,arch=False):
 
 
 def get_optimizer(model):
-    parameters = _get_paramters(model)
+    parameters = _get_paramters(model, True)
     opt_lower = cfg.SOLVER.OPTIMIZER.lower()
 
     if opt_lower == 'sgd':
@@ -69,7 +94,7 @@ def get_optimizer(model):
     return optimizer
 
 def get_arch_optimizer(model):
-    parameters = _get_paramters(model,True)
+    parameters = model.arch_parameters()
     opt_lower = cfg.SOLVER.OPTIMIZER.lower()
 
     if opt_lower == 'sgd':

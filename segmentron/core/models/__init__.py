@@ -1,6 +1,7 @@
 import numpy as np
 
 from .supernet import GeneralizedMTLNASNet
+from .supernet_fastscnn import GeneralizedFastSCNNNet
 from .nddr_net import SingleTaskNet, SharedFeatureNet, NDDRNet
 from .vgg16_lfov_bn import DeepLabLargeFOVBN
 from .vgg16_lfov_bn_16_stages import DeepLabLargeFOVBN16
