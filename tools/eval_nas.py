@@ -14,10 +14,10 @@ lib_path = os.path.abspath(os.path.join('.'))
 print(lib_path)
 sys.path.append(lib_path)
 
-from core.config import cfg
-from core.tasks import get_tasks
-from core.data import get_dataset
-from core.models import get_model
+from ..config import cfg
+from ..tasks import get_tasks
+from ..data import get_dataset
+from ..models import get_model
 
 from eval import evaluate
 

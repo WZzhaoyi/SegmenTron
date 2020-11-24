@@ -18,7 +18,7 @@ import torch.nn.functional as F
 
 from torchvision import transforms
 from segmentron.data.dataloader import get_segmentation_dataset
-from segmentron.models.model_zoo import get_supernet
+from segmentron.models.nas_model import get_supernet
 from segmentron.solver.loss import get_segmentation_loss
 from segmentron.solver.optimizer import get_optimizer, get_arch_optimizer
 from segmentron.solver.lr_scheduler import get_scheduler, get_arch_scheduler
@@ -30,6 +30,7 @@ from segmentron.utils.default_setup import default_setup
 from segmentron.utils.visualize import show_flops_params
 from segmentron.config import cfg
 from tensorboardX import SummaryWriter
+from segmentron.core.utils.visualization import process_image, save_heatmap, save_connectivity
 
 class Trainer(object):
     def __init__(self, args):
@@ -45,12 +46,15 @@ class Trainer(object):
         data_kwargs = {'transform': input_transform, 'base_size': cfg.TRAIN.BASE_SIZE,
                        'crop_size': cfg.TRAIN.CROP_SIZE}
         train_dataset = get_segmentation_dataset(cfg.DATASET.NAME, split='train', mode='train', **data_kwargs)
+        search_dataset = get_segmentation_dataset(cfg.DATASET.NAME, split='val', mode='val', **data_kwargs)
         val_dataset = get_segmentation_dataset(cfg.DATASET.NAME, split='val', mode=cfg.DATASET.MODE, **data_kwargs)
         self.iters_per_epoch = len(train_dataset) // (args.num_gpus * cfg.TRAIN.BATCH_SIZE)
         self.max_iters = cfg.TRAIN.EPOCHS * self.iters_per_epoch
 
         train_sampler = make_data_sampler(train_dataset, shuffle=True, distributed=args.distributed)
         train_batch_sampler = make_batch_data_sampler(train_sampler, cfg.TRAIN.BATCH_SIZE, self.max_iters, drop_last=True)
+        search_sampler = make_data_sampler(search_dataset, shuffle=True, distributed=args.distributed)
+        search_batch_sampler = make_batch_data_sampler(search_sampler, cfg.TRAIN.BATCH_SIZE, self.max_iters, drop_last=True)
         val_sampler = make_data_sampler(val_dataset, shuffle=True, distributed=args.distributed)
         val_batch_sampler = make_batch_data_sampler(val_sampler, cfg.TEST.BATCH_SIZE, drop_last=True)
 
@@ -58,13 +62,22 @@ class Trainer(object):
                                             batch_sampler=train_batch_sampler,
                                             num_workers=cfg.DATASET.WORKERS,
                                             pin_memory=True)
+        self.search_loader = data.DataLoader(dataset=search_dataset,
+                                            batch_sampler=search_batch_sampler,
+                                            num_workers=cfg.DATASET.WORKERS,
+                                            pin_memory=True)
         self.val_loader = data.DataLoader(dataset=val_dataset,
                                           batch_sampler=val_batch_sampler,
                                           num_workers=cfg.DATASET.WORKERS,
                                           pin_memory=True)
 
+        # create criterion
+        self.criterion = get_segmentation_loss(cfg.MODEL.MODEL_NAME, use_ohem=cfg.SOLVER.OHEM,
+                                               aux=cfg.SOLVER.AUX, aux_weight=cfg.SOLVER.AUX_WEIGHT,
+                                               ignore_index=cfg.DATASET.IGNORE_INDEX).to(self.device)
+        
         # create network
-        self.model = get_supernet().to(self.device)
+        self.model = get_supernet(self.criterion).to(self.device)
         
         # print params and flops
         if get_rank() == 0:
@@ -81,14 +94,9 @@ class Trainer(object):
         else:
             logging.info('Not use SyncBatchNorm!')
 
-        # create criterion
-        self.criterion = get_segmentation_loss(cfg.MODEL.MODEL_NAME, use_ohem=cfg.SOLVER.OHEM,
-                                               aux=cfg.SOLVER.AUX, aux_weight=cfg.SOLVER.AUX_WEIGHT,
-                                               ignore_index=cfg.DATASET.IGNORE_INDEX).to(self.device)
-
         # optimizer, for model just includes encoder, decoder(head and auxlayer).
         self.optimizer = get_optimizer(self.model)
-        self.arch_optimizer = get_arch_optimizer(self)
+        self.arch_optimizer = get_arch_optimizer(self.model)
 
         # lr scheduling
         self.lr_scheduler = get_scheduler(self.optimizer, max_iters=self.max_iters,
@@ -131,7 +139,7 @@ class Trainer(object):
 
         self.model.train()
         iteration = self.start_epoch * iters_per_epoch if self.start_epoch > 0 else 0
-        val_iter = iter(self.val_loader)
+        val_iter = iter(self.search_loader)
 
         for (images, targets, _) in self.train_loader:
             epoch = iteration // iters_per_epoch + 1
@@ -141,10 +149,10 @@ class Trainer(object):
             if epoch > 10:
                 val_batch = next(val_iter, None)
                 if val_batch is None:  # val_iter has reached its end
-                    val_sampler.set_epoch(epoch)
-                    val_iter = iter(self.val_loader)
+                    # val_sampler.set_epoch(epoch) ???
+                    val_iter = iter(self.search_loader)
                     val_batch = next(val_iter)
-                image_search, targets_search = val_batch
+                image_search, targets_search, fileName_search = val_batch
                 image_search = image_search.to(self.device)
                 targets_search = targets_search.to(self.device)
 
@@ -155,7 +163,7 @@ class Trainer(object):
                 losses = sum(loss for loss in arch_loss_dict.values())
 
                 loss_dict_reduced = reduce_loss_dict(arch_loss_dict)
-                arch_losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+                arch_losses_reduced = sum(loss for loss in loss_dict_reduced.values()).item()
 
                 self.arch_optimizer.zero_grad()
                 losses.backward()
@@ -195,7 +203,7 @@ class Trainer(object):
                     "Epoch: {:d}/{:d} || Iters: {:d}/{:d} || Lr: {:.6f} || "
                     "Loss: {:.4f}/{:.4f} || Cost Time: {} || Estimated Time: {}".format(
                         epoch, epochs, iteration % iters_per_epoch, iters_per_epoch,
-                        self.optimizer.param_groups[0]['lr'], losses_reduced.item(), arch_losses_reduced.item(),
+                        self.optimizer.param_groups[0]['lr'], losses_reduced.item(), arch_losses_reduced,
                         str(datetime.timedelta(seconds=int(time.time() - start_time))),
                         eta_string))
 
@@ -211,6 +219,8 @@ class Trainer(object):
         logging.info(
             "Total training time: {} ({:.4f}s / it)".format(
                 total_training_str, total_training_time / max_iters))
+        writer.add_scalar('Train/train_loss', losses_reduced.item(), epoch)
+        writer.add_scalar('Train/search_loss', arch_losses_reduced, epoch)
 
     def validation(self, epoch):
         self.metric.reset()
@@ -240,6 +250,8 @@ class Trainer(object):
             logging.info("[EVAL] Sample: {:d}, pixAcc: {:.3f}, mIoU: {:.3f}".format(i + 1, pixAcc * 100, mIoU * 100))
         pixAcc, mIoU = self.metric.get()
         logging.info("[EVAL END] Epoch: {:d}, pixAcc: {:.3f}, mIoU: {:.3f}".format(epoch, pixAcc * 100, mIoU * 100))
+        writer.add_scalar('Val/pixAcc', pixAcc * 100, epoch)
+        writer.add_scalar('Val/mIoU', mIoU * 100, epoch)
         synchronize()
         if self.best_pred < mIoU and self.save_to_disk:
             self.best_pred = mIoU
@@ -268,5 +280,6 @@ if __name__ == '__main__':
     torch.backends.cudnn.benchmark = False  # This can slow down training
 
     # create a trainer and start train
+    writer = SummaryWriter(logdir=os.path.join(cfg.TRAIN.LOG_SAVE_DIR, 'log'+str(cfg.TIME_STAMP)))
     trainer = Trainer(args)
     trainer.train()

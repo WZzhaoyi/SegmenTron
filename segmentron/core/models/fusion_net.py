@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
-from core.models.common_layers import Stage
-from core.config import cfg
+from ..models.common_layers import Stage
+from ..config import cfg
 
 def get_fusion_net(net1_dim=64, net2_dim=128, net1_net2_factor=4):
-    net1 = BranchNet(64, 64,)
+    net1 = BranchNet(64, 64)
     net2 = BranchNet(128, 128)
     return [net1,net2,net1_net2_factor]
 

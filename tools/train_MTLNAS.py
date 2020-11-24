@@ -18,13 +18,13 @@ lib_path = os.path.abspath(os.path.join('.'))
 print(lib_path)
 sys.path.append(lib_path)
 
-from core.config import cfg
-from core.data import get_dataset
-from core.tasks import get_tasks
-from core.models import get_model
-from core.utils import get_print
-from core.utils.losses import entropy_loss, l1_loss
-from core.utils.visualization import process_image, save_heatmap, save_connectivity
+from ..config import cfg
+from ..data import get_dataset
+from ..tasks import get_tasks
+from ..models import get_model
+from ..utils import get_print
+from ..utils.losses import entropy_loss, l1_loss
+from ..utils.visualization import process_image, save_heatmap, save_connectivity
 
 from eval import evaluate
 

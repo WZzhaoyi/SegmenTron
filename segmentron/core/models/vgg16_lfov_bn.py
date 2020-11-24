@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from core.models.common_layers import Stage
-from core.config import cfg
+from ..models.common_layers import Stage
+from ..config import cfg
 
 
 class DeepLabLargeFOVBN(nn.Module):

@@ -186,7 +186,7 @@ def save_connectivity(net1, net2, connectivity1, connectivity2, filename, align=
 
 
 if __name__ == '__main__':
-    from core.models.stagewise_search import vgg_stage_wise_connectivity_matrix_cross_task
+    from ..models.stagewise_search import vgg_stage_wise_connectivity_matrix_cross_task
     mat1 = vgg_stage_wise_connectivity_matrix_cross_task() * np.random.randn(13, 13) > 0.
     mat2 = vgg_stage_wise_connectivity_matrix_cross_task() * np.random.randn(13, 13) > 0.
     vis_connectivity(mat1.astype(np.float),

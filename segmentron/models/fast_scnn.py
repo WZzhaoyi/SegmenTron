@@ -1,16 +1,19 @@
 """Fast Segmentation Convolutional Neural Network"""
 import os
+import sys
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# sys.path.append('.')
+# sys.path.append('..')
 from .model_zoo import MODEL_REGISTRY
 from .segbase import SegBaseModel
 from ..modules.basic import SeparableConv2d, _ConvBNReLU, InvertedResidual
 from ..modules import PyramidPooling, get_norm
 from ..config import cfg
 
-__all__ = ['FastSCNN']
+__all__ = ['FastSCNN','FastSCNNBranch']
 
 
 @MODEL_REGISTRY.register()
@@ -163,7 +166,7 @@ class Classifer(nn.Module):
 
 class FastSCNNBranch(SegBaseModel):
     def __init__(self):
-        super(FastSCNN, self).__init__(need_backbone=False)
+        super(FastSCNNBranch, self).__init__(need_backbone=False)
         self.aux = cfg.SOLVER.AUX
         self.norm_layer = get_norm(cfg.MODEL.BN_TYPE)
         self.learning_to_downsample = LearningToDownsample(32, 48, 64, norm_layer=self.norm_layer)

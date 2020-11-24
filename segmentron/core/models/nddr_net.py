@@ -5,10 +5,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from core.models.common_layers import batch_norm, get_nddr
-from core.tasks import get_tasks
-from core.utils import AttrDict
-from core.utils.losses import poly
+from ..models.common_layers import batch_norm, get_nddr
+from ..tasks import get_tasks
+from ..utils import AttrDict
+from ..utils.losses import poly
 
 
 class SingleTaskNet(nn.Module):

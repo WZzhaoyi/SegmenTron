@@ -15,6 +15,8 @@ cfg.PHASE = 'train'
 ########################## dataset config #########################################
 # dataset name
 cfg.DATASET.NAME = ''
+# dataset class
+cfg.DATASET.NUM_CLASS = 19
 # pixel mean
 cfg.DATASET.MEAN = [0.5, 0.5, 0.5]
 # pixel std
@@ -59,6 +61,12 @@ cfg.TRAIN.RESUME_MODEL_PATH = ''
 cfg.TRAIN.SYNC_BATCH_NORM = True
 # save model every checkpoint-epoch
 cfg.TRAIN.SNAPSHOT_EPOCH = 10
+
+# cfg.TRAIN.LR = 0.001
+cfg.TRAIN.NDDR_FACTOR = 100.
+# cfg.TRAIN.WARMUP = 0
+# cfg.TRAIN.MOMENTUM = 0.9
+
 ########################### architecture search config ##################################
 # cfg.ARCH = CN()
 cfg.ARCH.SEARCHSPACE = 'GeneralizedMTLNAS' # Run nddr when this is empty
@@ -79,7 +87,7 @@ cfg.ARCH.ENTROPY_REGULARIZATION_WEIGHT = 10.  # 10. or 50.
 cfg.ARCH.L1_REGULARIZATION = False
 cfg.ARCH.L1_OFF = False  # turn off l1 after certain period
 cfg.ARCH.WEIGHTED_L1 = False
-cfg.ARCH.L1_PERIOD = (0., 1.)
+cfg.ARCH.L1_PERIOD = (0., 0.) #(0., 1.0) ???
 cfg.ARCH.L1_REGULARIZATION_WEIGHT = 5.
 # Feedforward hard vs. soft options
 cfg.ARCH.HARD_WEIGHT_TRAINING = True  # use gumbel trick for feedforward
@@ -163,6 +171,15 @@ cfg.MODEL.BN_EPS_FOR_DECODER = None
 cfg.MODEL.OUTPUT_STRIDE = 16
 # BatchNorm momentum, if set None will use api default value.
 cfg.MODEL.BN_MOMENTUM = None
+# scale factor between two branch`s feature map
+cfg.MODEL.MODEL_FACTOR = 4
+
+cfg.MODEL.NDDR_BN_TYPE = 'default'
+
+cfg.MODEL.INIT = (0.9, 0.1)
+
+cfg.MODEL.ZERO_BATCH_NORM_GAMMA = False
+cfg.MODEL.BATCH_NORM_MOMENTUM = 0.05
 
 ########################## DANet config ####################################
 # danet param

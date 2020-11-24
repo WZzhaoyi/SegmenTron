@@ -170,9 +170,9 @@ def get_arch_scheduler(arch_optimizer, max_iters, iters_per_epoch):
     mode = cfg.SOLVER.LR_SCHEDULER.lower()
     warm_up_iters = iters_per_epoch * cfg.SOLVER.WARMUP.EPOCHS
     if mode == 'poly':
-        if cfg.TRAIN.WARMUP > 0.:
+        if cfg.SOLVER.WARMUP.EPOCHS > 0.:
             return optim.lr_scheduler.LambdaLR(arch_optimizer,
-                                                    lambda step: min(1., float(step) / cfg.TRAIN.WARMUP) * (1 - float(step) / cfg.TRAIN.EPOCHS) ** cfg.SOLVER.POLY.POWER,
+                                                    lambda step: min(1., float(step) / cfg.SOLVER.WARMUP.EPOCHS) * (1 - float(step) / cfg.TRAIN.EPOCHS) ** cfg.SOLVER.POLY.POWER,
                                                     last_epoch=-1)
         else:
             return optim.lr_scheduler.LambdaLR(arch_optimizer,

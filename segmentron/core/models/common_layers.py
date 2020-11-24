@@ -215,24 +215,33 @@ class SingleSidedAsymmetricNDDR(nn.Module):
 
 class SingleSidedAsymmetricFeatureFusion(nn.Module):
     def __init__(self, cfg, in_channels, out_channels, factor):
-        super(SingleSidedAsymmetricNDDR, self).__init__()
+        super(SingleSidedAsymmetricFeatureFusion, self).__init__()
         init_weights = cfg.MODEL.INIT
         norm = get_nddr_bn(cfg)
         self.factor = factor
-        
+
+        self.localConv = nn.Sequential(
+            nn.Conv2d(
+                out_channels, out_channels, kernel_size=3, stride=1,
+                padding=1, groups=out_channels, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(
+                out_channels, out_channels, kernel_size=1, stride=1,
+                padding=0, bias=False),
+        )
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
-        assert in_channels >= out_channels
+        # assert in_channels >= out_channels
         # check if out_channel divides in_channels
-        assert in_channels % out_channels == 0
-        multipiler = in_channels / out_channels - 1
+        # assert in_channels % out_channels == 0
+        # multipiler = in_channels / out_channels - 1
         
         # Initialize weight
-        if len(init_weights):
-            weight = [torch.eye(out_channels) * init_weights[0]] +\
-                 [torch.eye(out_channels) * init_weights[1] / float(multipiler) for _ in range(int(multipiler))]
-            self.conv.weight = nn.Parameter(torch.cat(weight, dim=1).view(out_channels, -1, 1, 1))
-        else:
-            nn.init.kaiming_normal_(self.conv.weight, mode='fan_out', nonlinearity='relu')
+        # if len(init_weights):
+        #     weight = [torch.eye(out_channels) * init_weights[0]] +\
+        #          [torch.eye(out_channels) * init_weights[1] / float(multipiler) for _ in range(int(multipiler))]
+        #     self.conv.weight = nn.Parameter(torch.cat(weight, dim=1).view(out_channels, -1, 1, 1))
+        # else:
+        #     nn.init.kaiming_normal_(self.conv.weight, mode='fan_out', nonlinearity='relu')
         
         self.activation = Swish()
         self.bn = norm(out_channels)
@@ -245,12 +254,23 @@ class SingleSidedAsymmetricFeatureFusion(nn.Module):
         :param features: upstream feature maps
         :return:
         """
-        x = torch.cat(features, 1)
-        if self.factor != 1:
-            x = F.interpolate(x, scale_factor=self.factor, mode= 'bilinear')
-        out = self.conv(x)
-        out = self.bn(out)
-        out = self.activation(out)
+        # x = torch.cat(features, 1)
+        local_feature = self.localConv(features[0])
+        shared_features = features[1:]
+        size = local_feature.size()[2:]
+        channel = local_feature.size()[1]
+        
+        for shared_feature in shared_features:
+            shared_feature = self.bn(self.conv(shared_feature))
+            if self.factor != 1:
+                shared_feature = F.interpolate(shared_feature, size=size, mode= 'bilinear')
+            shered_feature = self.activation(shared_feature)
+            local_feature = local_feature + 0.25 * shered_feature
+        
+        out = local_feature
+        # out = self.conv(x)
+        # out = self.bn(out)
+        # out = self.activation(out)
         return out
 
 

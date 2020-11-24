@@ -7,7 +7,7 @@ import logging
 
 from ..config import cfg
 
-def save_checkpoint(model, epoch, optimizer=None, lr_scheduler=None, is_best=False):
+def save_checkpoint(model, epoch, optimizer=None, arch_optimizer=None, lr_scheduler=None, arch_lr_scheduler=None, is_best=False):
     """Save Checkpoint"""
     directory = os.path.expanduser(cfg.TRAIN.MODEL_SAVE_DIR)
     directory = os.path.join(directory, '{}_{}_{}_{}'.format(cfg.MODEL.MODEL_NAME, cfg.MODEL.BACKBONE,
@@ -26,7 +26,9 @@ def save_checkpoint(model, epoch, optimizer=None, lr_scheduler=None, is_best=Fal
             'epoch': epoch,
             'state_dict': model_state_dict,
             'optimizer': optimizer.state_dict(),
-            'lr_scheduler': lr_scheduler.state_dict()
+            'arch_optimizer': arch_optimizer.state_dict(),
+            'lr_scheduler': lr_scheduler.state_dict(),
+            'arch_lr_scheduler': arch_lr_scheduler.state_dict()
         }
         if not os.path.exists(filename):
             torch.save(save_state, filename)

@@ -7,19 +7,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
 
-from core.models.common_layers import get_nddr
-from core.utils import AttrDict
-from core.tasks import get_tasks
-from core.utils.losses import poly, entropy_loss, l1_loss
+from ..models.common_layers import get_nddr
+from ..utils import AttrDict
+from ..tasks import get_tasks
+from ..utils.losses import poly, entropy_loss, l1_loss
 sys.path.append('../..')
-from models.fast_scnn import FeatureFusionModule, Classifer
-
+from ...models.fast_scnn import FeatureFusionModule, Classifer
+from ...solver.loss import get_segmentation_loss
 
 class GeneralizedFastSCNNNet(nn.Module):
     def __init__(self, cfg, net_branch, net_fusion,
                  net1_connectivity_matrix,
                  net2_connectivity_matrix,
-                 net1_net2_factor=4
+                 net1_net2_factor=4,
+                 criterion=nn.CrossEntropyLoss
                 ):
         """
         :param net1: task one network
@@ -29,17 +30,21 @@ class GeneralizedFastSCNNNet(nn.Module):
         """
         super(GeneralizedFastSCNNNet, self).__init__()
         self.cfg = cfg
+        self.nclass = cfg.DATASET.NUM_CLASS
+        self.aux = cfg.SOLVER.AUX
         self.net_branch = net_branch
         self.net1 = net_fusion[0]
         self.net2 = net_fusion[1]
         self.net1_net2_factor = net1_net2_factor
+        self.criterion = criterion
+
         assert len(self.net1.stages) == len(self.net2.stages)
         print("Model has %d stages" % len(self.net2.stages))
         self.feature_fusion = FeatureFusionModule(64, 128, 128)
         self.classifier = Classifer(128, self.nclass)
 
         # self.task1, self.task2 = get_tasks(cfg)
-        self.num_stages = len(net_fusion.stages)
+        self.num_stages = len(self.net1.stages)
         self.net1_connectivity_matrix = net1_connectivity_matrix
         self.net2_connectivity_matrix = net2_connectivity_matrix
         net1_in_degrees = net1_connectivity_matrix.sum(axis=1)
@@ -50,11 +55,11 @@ class GeneralizedFastSCNNNet(nn.Module):
         for stage_id in range(self.num_stages):
             n_channel = self.net1.stages[stage_id].out_channels
             net1_op = get_nddr(cfg,
-                (net1_in_degrees[stage_id]+1)*n_channel,  # +1 for original upstream input
-                n_channel, self.net1_net2_factor)
+                128,  # +1 for original upstream input
+                64, self.net1_net2_factor)
             net2_op = get_nddr(cfg,
-                (net2_in_degrees[stage_id]+1)*n_channel,  # +1 for original upstream input
-                n_channel, 1/self.net1_net2_factor)
+                64,  # +1 for original upstream input
+                128, 1/self.net1_net2_factor)
             net1_fusion_ops.append(net1_op)
             net2_fusion_ops.append(net2_op)
 
@@ -101,10 +106,11 @@ class GeneralizedFastSCNNNet(nn.Module):
 
     def loss(self, image, labels):
         result = self.forward(image)
-        result.out = nn.CrossEntropyLoss(result[0], labels)
-        result.auxout1 = nn.CrossEntropyLoss(result[1], labels)
-        result.auxout2 = nn.CrossEntropyLoss(result[2], labels)
-        result.loss = result.out + 0.2 * result.loss1 + 0.2 * result.loss2
+        # out = nn.CrossEntropyLoss(result[0], labels)
+        # auxout1 = nn.CrossEntropyLoss(result[1], labels)
+        # auxout2 = nn.CrossEntropyLoss(result[2], labels)
+        # loss = out + 0.2 * auxout1 + 0.2 * auxout2
+        loss = self.criterion(result, labels)
 
         if self.arch_training:
             arch_parameters = [
@@ -112,25 +118,25 @@ class GeneralizedFastSCNNNet(nn.Module):
                 self.net2_alphas[np.nonzero(self.net2_connectivity_matrix)],
             ]
             if self.cfg.ARCH.ENTROPY_REGULARIZATION:
-                result.entropy_loss = entropy_loss(arch_parameters)
-                result.entropy_weight = poly(start=0., end=self.cfg.ARCH.ENTROPY_REGULARIZATION_WEIGHT,
+                entropy_los = entropy_loss(arch_parameters)
+                entropy_weight = poly(start=0., end=self.cfg.ARCH.ENTROPY_REGULARIZATION_WEIGHT,
                                     steps=self._step, total_steps=self.cfg.TRAIN.EPOCHS,
                                     period=self.cfg.ARCH.ENTROPY_PERIOD,
                                     power=1.)
-                result.loss += result.entropy_weight * result.entropy_loss
+                loss['loss'] += entropy_weight * entropy_los
             if self.cfg.ARCH.L1_REGULARIZATION:
                 if self.cfg.ARCH.WEIGHTED_L1:
-                    result.l1_loss = l1_loss(arch_parameters, self.path_costs)
+                    l1_los = l1_loss(arch_parameters, self.path_costs)
                 else:
-                    result.l1_loss = l1_loss(arch_parameters)
-                result.l1_weight = poly(start=0., end=self.cfg.ARCH.L1_REGULARIZATION_WEIGHT,
+                    l1_los = l1_loss(arch_parameters)
+                l1_weight = poly(start=0., end=self.cfg.ARCH.L1_REGULARIZATION_WEIGHT,
                                 steps=self._step, total_steps=self.cfg.TRAIN.EPOCHS,
                                 period=self.cfg.ARCH.L1_PERIOD,
                                 power=1.)
                 if float(self._step) / self.cfg.TRAIN.EPOCHS > self.cfg.ARCH.L1_PERIOD[1] and self.cfg.ARCH.L1_OFF:
-                    result.l1_weight = 0.
-                result.loss += result.l1_weight * result.l1_loss
-        return result.loss
+                    l1_weight = 0.
+                loss['loss'] += l1_weight * l1_los
+        return loss
 
     def new(self):
         return copy.deepcopy(self)

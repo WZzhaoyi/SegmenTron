@@ -30,13 +30,14 @@ def _get_paramters(model,arch=False):
                 assert 'alpha' not in k
                 base_params.append(v)
         # assert len(fc8_weights) > 0
-        assert len(nddr_params) > 0 and len(fc8_bias) > 0
+        # assert len(fc8_bias) > 0
+        assert len(nddr_params) > 0
 
         parameter_dict = [
             {'params': base_params},
-            {'params': fc8_weights, 'lr': cfg.TRAIN.LR * cfg.TRAIN.FC8_WEIGHT_FACTOR},
-            {'params': fc8_bias, 'lr': cfg.TRAIN.LR * cfg.TRAIN.FC8_BIAS_FACTOR},
-            {'params': nddr_params, 'lr': cfg.TRAIN.LR * cfg.TRAIN.NDDR_FACTOR}
+            # {'params': fc8_weights, 'lr': cfg.TRAIN.LR * cfg.TRAIN.FC8_WEIGHT_FACTOR},
+            # {'params': fc8_bias, 'lr': cfg.TRAIN.LR * cfg.TRAIN.FC8_BIAS_FACTOR},
+            {'params': nddr_params, 'lr': cfg.SOLVER.LR * cfg.TRAIN.NDDR_FACTOR}
         ]
         return parameter_dict
     

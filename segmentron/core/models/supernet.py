@@ -6,10 +6,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as dist
 
-from core.models.common_layers import get_nddr
-from core.utils import AttrDict
-from core.tasks import get_tasks
-from core.utils.losses import poly, entropy_loss, l1_loss
+from ..models.common_layers import get_nddr
+from ..utils import AttrDict
+from ..tasks import get_tasks
+from ..utils.losses import poly, entropy_loss, l1_loss
 
 
 class GeneralizedMTLNASNet(nn.Module):
