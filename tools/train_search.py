@@ -209,6 +209,8 @@ class Trainer(object):
 
             if iteration % self.iters_per_epoch == 0 and self.save_to_disk:
                 save_checkpoint(self.model, epoch, self.optimizer, self.arch_optimizer, self.lr_scheduler, self.arch_lr_scheduler, is_best=False)
+                writer.add_scalar('Train/train_loss', losses_reduced.item(), epoch)
+                writer.add_scalar('Train/search_loss', arch_losses_reduced, epoch)
 
             if not self.args.skip_val and iteration % val_per_iters == 0:
                 self.validation(epoch)
@@ -219,8 +221,6 @@ class Trainer(object):
         logging.info(
             "Total training time: {} ({:.4f}s / it)".format(
                 total_training_str, total_training_time / max_iters))
-        writer.add_scalar('Train/train_loss', losses_reduced.item(), epoch)
-        writer.add_scalar('Train/search_loss', arch_losses_reduced, epoch)
 
     def validation(self, epoch):
         self.metric.reset()
