@@ -146,7 +146,7 @@ class Trainer(object):
             iteration += 1
 
             # arch search
-            if epoch > 10:
+            if epoch > cfg.ARCH.SEARCH_EPOCH:
                 val_batch = next(val_iter, None)
                 if val_batch is None:  # val_iter has reached its end
                     # val_sampler.set_epoch(epoch) ???
@@ -211,8 +211,34 @@ class Trainer(object):
                 save_checkpoint(self.model, epoch, self.optimizer, self.arch_optimizer, self.lr_scheduler, self.arch_lr_scheduler, is_best=False)
                 writer.add_scalar('Train/train_loss', losses_reduced.item(), epoch)
                 writer.add_scalar('Train/search_loss', arch_losses_reduced, epoch)
+                if cfg.ARCH.SEARCHSPACE == 'GeneralizedFastSCNN' and epoch > cfg.ARCH.SEARCH_EPOCH:
+                    writer.add_scalar('temperature', self.model.get_temperature(), epoch)
+                    alpha1 = torch.sigmoid(self.model.net1_alphas).detach().cpu().numpy()
+                    alpha2 = torch.sigmoid(self.model.net2_alphas).detach().cpu().numpy()
+                    alpha1_path = os.path.join(cfg.TRAIN.LOG_SAVE_DIR, 'alpha1')
+                    if not os.path.isdir(alpha1_path):
+                        os.makedirs(alpha1_path)
+                    alpha2_path = os.path.join(cfg.TRAIN.LOG_SAVE_DIR, 'alpha2')
+                    if not os.path.isdir(alpha2_path):
+                        os.makedirs(alpha2_path)
+                    heatmap1 = save_heatmap(alpha1, os.path.join(alpha1_path, "%s_alpha1.png"%str(epoch).zfill(5)),save=True)
+                    heatmap2 = save_heatmap(alpha2, os.path.join(alpha2_path, "%s_alpha2.png"%str(epoch).zfill(5)),save=True)
+                    # writer.add_image('alpha/net1', heatmap1, epoch)
+                    # writer.add_image('alpha/net2', heatmap2, epoch)
+                    writer.add_image('alpha/net1', heatmap1, epoch)
+                    writer.add_image('alpha/net2', heatmap2, epoch)
+                    network_path = os.path.join(cfg.TRAIN.LOG_SAVE_DIR, 'network')
+                    if not os.path.isdir(network_path):
+                        os.makedirs(network_path)
+                    connectivity_plot = save_connectivity(alpha1, alpha2,
+                                                          self.model.net1_connectivity_matrix,
+                                                          self.model.net2_connectivity_matrix,
+                                                          os.path.join(network_path, "%s_network.png" %str(epoch).zfill(5)),
+                                                          save=True
+                                                         )
+                    writer.add_image('network', connectivity_plot, epoch)
 
-            if not self.args.skip_val and iteration % val_per_iters == 0:
+            if not self.args.skip_val and iteration % val_per_iters == 0 and epoch > cfg.ARCH.SEARCH_EPOCH:
                 self.validation(epoch)
                 self.model.train()
 
@@ -230,6 +256,7 @@ class Trainer(object):
             model = self.model
         torch.cuda.empty_cache()
         model.eval()
+        model.arch_eval()
         for i, (image, target, filename) in enumerate(self.val_loader):
             image = image.to(self.device)
             target = target.to(self.device)

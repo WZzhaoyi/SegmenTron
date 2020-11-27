@@ -30,7 +30,7 @@ def default_setup(args):
     #     outdir = '../runs/pred_pic/{}_{}_{}'.format(args.model, args.backbone, args.dataset)
     #     if not os.path.exists(outdir):
     #         os.makedirs(outdir)
-
+    cfg.TRAIN.LOG_SAVE_DIR = cfg.TRAIN.LOG_SAVE_DIR + str(cfg.TIME_STAMP)
     save_dir = cfg.TRAIN.LOG_SAVE_DIR if cfg.PHASE == 'train' else None
     setup_logger("Segmentron", save_dir, get_rank(), filename='{}_{}_{}_{}_log.txt'.format(
         cfg.MODEL.MODEL_NAME, cfg.MODEL.BACKBONE, cfg.DATASET.NAME, cfg.TIME_STAMP))

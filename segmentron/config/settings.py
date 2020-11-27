@@ -69,6 +69,7 @@ cfg.TRAIN.NDDR_FACTOR = 100.
 
 ########################### architecture search config ##################################
 # cfg.ARCH = CN()
+cfg.ARCH.SEARCH_EPOCH = 10
 cfg.ARCH.SEARCHSPACE = 'GeneralizedMTLNAS' # Run nddr when this is empty
 cfg.ARCH.TRAIN_SPLIT = 0.5  # portion of the original training data to keep, with the rest being used for nas
 cfg.ARCH.MIXED_DATA = True
@@ -87,7 +88,7 @@ cfg.ARCH.ENTROPY_REGULARIZATION_WEIGHT = 10.  # 10. or 50.
 cfg.ARCH.L1_REGULARIZATION = False
 cfg.ARCH.L1_OFF = False  # turn off l1 after certain period
 cfg.ARCH.WEIGHTED_L1 = False
-cfg.ARCH.L1_PERIOD = (0., 0.) #(0., 1.0) ???
+cfg.ARCH.L1_PERIOD = (0., 1.) # (0., 1.0) ???
 cfg.ARCH.L1_REGULARIZATION_WEIGHT = 5.
 # Feedforward hard vs. soft options
 cfg.ARCH.HARD_WEIGHT_TRAINING = True  # use gumbel trick for feedforward

@@ -57,14 +57,25 @@ def process_normal_label(pred, gt, ignore_label):
     return pred, gt
 
 
-def save_heatmap(matrix, filename, vmin=0., vmax=1.):
+def save_heatmap(matrix, filename, vmin=0., vmax=1., save=True):
     fig = plt.figure(0)
     fig.clf()
     plt.matshow(matrix, fignum=0, cmap=plt.cm.bwr, vmin=vmin, vmax=vmax)
     plt.colorbar()
-    plt.savefig(filename)
-    img = Image.open(filename)
-    return np.array(img).transpose((2, 0, 1))
+    if save:
+        plt.savefig(filename)
+        img = Image.open(filename)
+        return np.array(img).transpose((2, 0, 1))
+    else:
+        return fig
+
+
+def fig2data(fig, expand=True):
+    fig.canvas.draw()
+    buf = fig.canvas.tostring_rgb()
+    ncols, nrows = fig.canvas.get_width_height()
+    shape = (nrows, ncols, 3) if not expand else (1, nrows, ncols, 3)
+    return np.fromstring(buf, dtype=np.uint8).reshape(shape)
 
 
 def _process_params(G, center, dim):
@@ -147,7 +158,7 @@ def task_layout(G, nodes, align='vertical',
     raise ValueError(msg)
     
 
-def save_connectivity(net1, net2, connectivity1, connectivity2, filename, align='horizontal', with_labels=False):
+def save_connectivity(net1, net2, connectivity1, connectivity2, filename, align='horizontal', with_labels=False, save=True):
     num_stages = net1.shape[0]
     G = nx.DiGraph()
     G.add_nodes_from([("1_%d" % i, dict(label=i)) for i in range(num_stages)], task=0, color='xkcd:azure')
@@ -178,11 +189,15 @@ def save_connectivity(net1, net2, connectivity1, connectivity2, filename, align=
     nx.draw(G, pos=pos, labels=labels, node_color=node_color, edge_color=edge_color, with_labels=with_labels)
     nx.draw_networkx_edges(G, pos=pos, edgelist=pos_edges, edge_color='xkcd:violet')
     arcs = nx.draw_networkx_edges(G, pos=pos, edgelist=neg_edges, edge_color='xkcd:silver', alpha=0.3)
-    for arc in arcs:
-        arc.set_linestyle('dotted')
-    plt.savefig(filename)
-    img = Image.open(filename)
-    return np.array(img).transpose((2, 0, 1))
+    if arcs != None:
+        for arc in arcs:
+            arc.set_linestyle('dotted')
+    if save:
+        plt.savefig(filename)
+        img = Image.open(filename)
+        return np.array(img).transpose((2, 0, 1))
+    else:
+        return fig
 
 
 if __name__ == '__main__':

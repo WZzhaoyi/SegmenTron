@@ -228,8 +228,9 @@ class SingleSidedAsymmetricFeatureFusion(nn.Module):
             nn.Conv2d(
                 out_channels, out_channels, kernel_size=1, stride=1,
                 padding=0, bias=False),
+            Swish()
         )
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        self.conv = nn.ModuleList([nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False) for i in range(3)])
         # assert in_channels >= out_channels
         # check if out_channel divides in_channels
         # assert in_channels % out_channels == 0
@@ -259,15 +260,16 @@ class SingleSidedAsymmetricFeatureFusion(nn.Module):
         shared_features = features[1:]
         size = local_feature.size()[2:]
         channel = local_feature.size()[1]
+        sum = torch.zeros(size=local_feature.size()).cuda()
         
-        for shared_feature in shared_features:
-            shared_feature = self.bn(self.conv(shared_feature))
+        for index, shared_feature in enumerate(shared_features):
+            shared_feature = self.bn(self.conv[index](shared_feature))
             if self.factor != 1:
                 shared_feature = F.interpolate(shared_feature, size=size, mode= 'bilinear')
             shered_feature = self.activation(shared_feature)
-            local_feature = local_feature + 0.25 * shered_feature
+            sum += sum + shered_feature * local_feature
         
-        out = local_feature
+        out = sum
         # out = self.conv(x)
         # out = self.bn(out)
         # out = self.activation(out)

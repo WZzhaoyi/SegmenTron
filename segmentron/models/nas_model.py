@@ -15,6 +15,7 @@ def get_supernet(criterion):
         fusion_net = get_fusion_net()
         net1_net2_factor = cfg.MODEL.MODEL_FACTOR
         net_branch = FastSCNNBranch()
+        load_model_pretrain(net_branch)
         model = GeneralizedFastSCNNNet(cfg, net_branch, fusion_net, net1_connectivity_matrix=connectivity(), net2_connectivity_matrix=connectivity(), net1_net2_factor=net1_net2_factor, criterion=criterion)
         return model
     else:
@@ -29,10 +30,15 @@ def load_model_pretrain(model):
             state_dict_suitable = OrderedDict()
             state_dict = model.state_dict()
             for k, v in state_dict_to_load.items():
-                if v.shape == state_dict[k].shape:
-                    state_dict_suitable[k] = v
-                else:
+                try:
+                    if v.shape == state_dict[k].shape:
+                        state_dict_suitable[k] = v
+                    else:
+                        keys_wrong_shape.append(k)
+                except KeyError:
+                    logging.info('KeyError' + k)
                     keys_wrong_shape.append(k)
+                    continue
             logging.info('Shape unmatched weights: {}'.format(keys_wrong_shape))
             msg = model.load_state_dict(state_dict_suitable, strict=False)
             logging.info(msg)

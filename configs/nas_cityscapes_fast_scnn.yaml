@@ -7,6 +7,7 @@ TRAIN:
     EPOCHS: 1000
     BATCH_SIZE: 12
     CROP_SIZE: (512, 1024)
+    PRETRAINED_MODEL_PATH: 'runs/checkpoints/FastSCNN__cityscape_BGA/best_model.pth'
 TEST:
     BATCH_SIZE: 4
     TEST_MODEL_PATH: 'runs/checkpoints/fast_scnn__cityscape_2019-11-19-02-02/best_model.pth'
@@ -28,4 +29,13 @@ MODEL:
 
 ARCH:
     SEARCHSPACE: 'GeneralizedFastSCNN'
-    LR: 0.01
+    ENTROPY_REGULARIZATION: True
+    ENTROPY_REGULARIZATION_WEIGHT: 10.
+    ENTROPY_PERIOD: (0.0, 0.0)
+    L1_REGULARIZATION: False
+    L1_REGULARIZATION_WEIGHT: 5.
+    L1_PERIOD: (0.0, 0.0)
+    HARD_ARCH_TRAINING: False
+    HARD_WEIGHT_TRAINING: True
+    HARD_EVAL: True
+    SEARCH_EPOCH: 0
