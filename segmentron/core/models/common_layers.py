@@ -216,7 +216,6 @@ class SingleSidedAsymmetricNDDR(nn.Module):
 class SingleSidedAsymmetricFeatureFusion(nn.Module):
     def __init__(self, cfg, in_channels, out_channels, factor):
         super(SingleSidedAsymmetricFeatureFusion, self).__init__()
-        init_weights = cfg.MODEL.INIT
         norm = get_nddr_bn(cfg)
         self.factor = factor
 
@@ -231,18 +230,6 @@ class SingleSidedAsymmetricFeatureFusion(nn.Module):
             Swish()
         )
         self.conv = nn.ModuleList([nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False) for i in range(3)])
-        # assert in_channels >= out_channels
-        # check if out_channel divides in_channels
-        # assert in_channels % out_channels == 0
-        # multipiler = in_channels / out_channels - 1
-        
-        # Initialize weight
-        # if len(init_weights):
-        #     weight = [torch.eye(out_channels) * init_weights[0]] +\
-        #          [torch.eye(out_channels) * init_weights[1] / float(multipiler) for _ in range(int(multipiler))]
-        #     self.conv.weight = nn.Parameter(torch.cat(weight, dim=1).view(out_channels, -1, 1, 1))
-        # else:
-        #     nn.init.kaiming_normal_(self.conv.weight, mode='fan_out', nonlinearity='relu')
         
         self.activation = Swish()
         self.bn = norm(out_channels)

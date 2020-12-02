@@ -189,7 +189,7 @@ def save_connectivity(net1, net2, connectivity1, connectivity2, filename, align=
     nx.draw(G, pos=pos, labels=labels, node_color=node_color, edge_color=edge_color, with_labels=with_labels)
     nx.draw_networkx_edges(G, pos=pos, edgelist=pos_edges, edge_color='xkcd:violet')
     arcs = nx.draw_networkx_edges(G, pos=pos, edgelist=neg_edges, edge_color='xkcd:silver', alpha=0.3)
-    if arcs != None:
+    if arcs is not None:
         for arc in arcs:
             arc.set_linestyle('dotted')
     if save:
