@@ -71,6 +71,7 @@ cfg.TRAIN.NDDR_FACTOR = 100.
 # cfg.ARCH = CN()
 cfg.ARCH.SEARCH_EPOCH = 10
 cfg.ARCH.SEARCHSPACE = 'GeneralizedMTLNAS' # Run nddr when this is empty
+cfg.ARCH.SKIP_CONNECTION = False
 cfg.ARCH.TRAIN_SPLIT = 0.5  # portion of the original training data to keep, with the rest being used for nas
 cfg.ARCH.MIXED_DATA = True
 # Optimization

@@ -47,27 +47,44 @@ class GeneralizedFastSCNNNet(nn.Module):
         self.num_stages = len(self.net1.stages)
         self.net1_connectivity_matrix = net1_connectivity_matrix
         self.net2_connectivity_matrix = net2_connectivity_matrix
-        net1_in_degrees = net1_connectivity_matrix.sum(axis=1)
-        net2_in_degrees = net2_connectivity_matrix.sum(axis=1)
+        net1_shared_index = net1_connectivity_matrix.sum(axis=1)
+        net2_shared_index = net2_connectivity_matrix.sum(axis=1)
         net1_fusion_ops = []  # used for incoming feature fusion
         net2_fusion_ops = []  # used for incoming feature fusion
 
-        for stage_id in range(self.num_stages):
-            n_channel = self.net1.stages[stage_id].out_channels
-            net1_op = get_nddr(cfg,
-                128,  # +1 for original upstream input
-                64, self.net1_net2_factor)
-            net2_op = get_nddr(cfg,
-                64,  # +1 for original upstream input
-                128, 1/self.net1_net2_factor)
-            net1_fusion_ops.append(net1_op)
-            net2_fusion_ops.append(net2_op)
+        if is not cfg.ARCH.SKIP_CONNECTION:
+            for stage_id in range(self.num_stages):
+                n_channel = self.net1.stages[stage_id].out_channels
+                net1_op = get_nddr(cfg,
+                    128,  # +1 for original upstream input
+                    64, self.net1_net2_factor)
+                net2_op = get_nddr(cfg,
+                    64,  # +1 for original upstream input
+                    128, 1/self.net1_net2_factor)
+                net1_fusion_ops.append(net1_op)
+                net2_fusion_ops.append(net2_op)
+        else:
+            for stage_id in range(self.num_stages):
+                n_channel = self.net1.stages[stage_id].out_channels
+                net1_op = get_nddr(cfg,
+                    128,  # +1 for original upstream input
+                    64, self.net1_net2_factor)
+                net2_op = get_nddr(cfg,
+                    64,  # +1 for original upstream input
+                    128, 1/self.net1_net2_factor)
+                net1_fusion_ops.append(net1_op)
+                net2_fusion_ops.append(net2_op)
+                
 
         net1_fusion_ops = nn.ModuleList(net1_fusion_ops)
         net2_fusion_ops = nn.ModuleList(net2_fusion_ops)
 
         self.net1_alphas = nn.Parameter(torch.zeros(net1_connectivity_matrix.shape))
         self.net2_alphas = nn.Parameter(torch.zeros(net2_connectivity_matrix.shape))
+
+        if cfg.ARCH.SKIP_CONNECTION:
+            self.net1_skip_alphas = nn.Parameter(torch.zeros(net1_connectivity_matrix.shape))
+            self.net2_skip_alphas = nn.Parameter(torch.zeros(net2_connectivity_matrix.shape))
 
         self.paths = nn.ModuleDict({
             'net1_paths': net1_fusion_ops,
@@ -106,10 +123,6 @@ class GeneralizedFastSCNNNet(nn.Module):
 
     def loss(self, image, labels):
         result = self.forward(image)
-        # out = nn.CrossEntropyLoss(result[0], labels)
-        # auxout1 = nn.CrossEntropyLoss(result[1], labels)
-        # auxout2 = nn.CrossEntropyLoss(result[2], labels)
-        # loss = out + 0.2 * auxout1 + 0.2 * auxout2
         loss = self.criterion(result, labels)
 
         if self.arch_training:

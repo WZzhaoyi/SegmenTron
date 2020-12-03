@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from timm.models.layers import create_conv2d, drop_path, create_pool2d, Swish, get_act_layer
 
 class Stage(nn.Module):
     def __init__(self, out_channels, layers):
@@ -21,6 +22,97 @@ def batch_norm(num_features, eps=1e-3, momentum=0.05):
     nn.init.constant_(bn.weight, 1)
     nn.init.constant_(bn.bias, 0)
     return bn
+
+
+class ResampleFeatureMap(nn.Sequential):
+
+    def __init__(self, in_channels, out_channels, reduction_ratio=1., pad_type='', pooling_type='max',
+                 norm_layer=nn.BatchNorm2d, apply_bn=False, conv_after_downsample=False, redundant_bias=False):
+        super(ResampleFeatureMap, self).__init__()
+        pooling_type = pooling_type or 'max'
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.reduction_ratio = reduction_ratio
+        self.conv_after_downsample = conv_after_downsample
+
+        conv = None
+        if in_channels != out_channels:
+            conv = ConvBnAct2d(
+                in_channels, out_channels, kernel_size=1, padding=pad_type,
+                norm_layer=norm_layer if apply_bn else None,
+                bias=not apply_bn or redundant_bias, act_layer=None)
+
+        if reduction_ratio > 1:
+            stride_size = int(reduction_ratio)
+            if conv is not None and not self.conv_after_downsample:
+                self.add_module('conv', conv)
+            self.add_module(
+                'downsample',
+                create_pool2d(
+                    pooling_type, kernel_size=stride_size + 1, stride=stride_size, padding=pad_type))
+            if conv is not None and self.conv_after_downsample:
+                self.add_module('conv', conv)
+        else:
+            if conv is not None:
+                self.add_module('conv', conv)
+            if reduction_ratio < 1:
+                scale = int(1 // reduction_ratio)
+                self.add_module('upsample', nn.UpsamplingNearest2d(scale_factor=scale))
+
+
+class SequentialList(nn.Sequential):
+    """ This module exists to work around torchscript typing issues list -> list"""
+    def __init__(self, *args):
+        super(SequentialList, self).__init__(*args)
+
+    def forward(self, x: List[torch.Tensor]) -> List[torch.Tensor]:
+        for module in self:
+            x = module(x)
+        return x
+
+
+class ConvBnAct2d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, dilation=1, padding='', bias=False,
+                 norm_layer=nn.BatchNorm2d, act_layer=_ACT_LAYER):
+        super(ConvBnAct2d, self).__init__()
+        self.conv = create_conv2d(
+            in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, padding=padding, bias=bias)
+        self.bn = None if norm_layer is None else norm_layer(out_channels)
+        self.act = None if act_layer is None else act_layer(inplace=True)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        if self.act is not None:
+            x = self.act(x)
+        return x
+
+
+class SeparableConv2d(nn.Module):
+    """ Separable Conv
+    """
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, dilation=1, padding='', bias=False,
+                 channel_multiplier=1.0, pw_kernel_size=1, norm_layer=nn.BatchNorm2d, act_layer=_ACT_LAYER):
+        super(SeparableConv2d, self).__init__()
+        self.conv_dw = create_conv2d(
+            in_channels, int(in_channels * channel_multiplier), kernel_size,
+            stride=stride, dilation=dilation, padding=padding, depthwise=True)
+
+        self.conv_pw = create_conv2d(
+            int(in_channels * channel_multiplier), out_channels, pw_kernel_size, padding=padding, bias=bias)
+
+        self.bn = None if norm_layer is None else norm_layer(out_channels)
+        self.act = None if act_layer is None else act_layer(inplace=True)
+
+    def forward(self, x):
+        x = self.conv_dw(x)
+        x = self.conv_pw(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        if self.act is not None:
+            x = self.act(x)
+        return x
 
 
 def get_nddr_bn(cfg):
@@ -260,6 +352,31 @@ class SingleSidedAsymmetricFeatureFusion(nn.Module):
         # out = self.conv(x)
         # out = self.bn(out)
         # out = self.activation(out)
+        return out
+
+
+class SingleSidedSkipFeatureFusion(nn.Module):
+    def __init__(self, cfg, in_offset, out_channels, factor):
+        super(SingleSidedAsymmetricFeatureFusion, self).__init__()
+        norm = get_nddr_bn(cfg)
+        self.factor = factor
+        self.in_offset = in_offset
+        self.out_channels = out_channels
+        self.resample = []
+
+
+    def forward(self, features):
+        """
+        :param features: upstream feature maps
+        :return:
+        """
+        local_feature = self.localConv(features[0])
+        shared_features = features[1:]
+        size = local_feature.size()[2:]
+        channel = local_feature.size()[1]
+        
+        out = sum
+        
         return out
 
 
