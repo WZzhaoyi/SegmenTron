@@ -3,7 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from timm.models.layers import create_conv2d, drop_path, create_pool2d, Swish, get_act_layer
+from typing import List
 
+
+_ACT_LAYER = Swish
 class Stage(nn.Module):
     def __init__(self, out_channels, layers):
         super(Stage, self).__init__()
@@ -46,10 +49,28 @@ class ResampleFeatureMap(nn.Sequential):
             stride_size = int(reduction_ratio)
             if conv is not None and not self.conv_after_downsample:
                 self.add_module('conv', conv)
-            self.add_module(
-                'downsample',
-                create_pool2d(
-                    pooling_type, kernel_size=stride_size + 1, stride=stride_size, padding=pad_type))
+            if reduction_ratio == 4:
+                stride_size = 2
+                self.add_module(
+                    'sconv',
+                    ConvBnAct2d(
+                        out_channels, out_channels, kernel_size=3, stride=2, padding=pad_type,
+                        norm_layer=norm_layer if apply_bn else None,
+                        bias=not apply_bn or redundant_bias, act_layer=None)
+                )
+                self.add_module(
+                    'downsample',
+                    create_pool2d(
+                        pooling_type, kernel_size=stride_size + 1, stride=stride_size, padding=pad_type))
+                self.add_module(
+                    'act',
+                    Swish()
+                )
+            else:
+                self.add_module(
+                    'downsample',
+                    create_pool2d(
+                        pooling_type, kernel_size=stride_size + 1, stride=stride_size, padding=pad_type))
             if conv is not None and self.conv_after_downsample:
                 self.add_module('conv', conv)
         else:
@@ -122,7 +143,7 @@ def get_nddr_bn(cfg):
         raise NotImplementedError
         
 
-def get_nddr(cfg, in_channels, out_channels, factor = 1):
+def get_nddr(cfg, in_channels, out_channels, factor = 1, in_offset=1):
     
     if cfg.ARCH.SEARCHSPACE == '':
         assert in_channels == out_channels
@@ -144,6 +165,8 @@ def get_nddr(cfg, in_channels, out_channels, factor = 1):
         else:
             raise NotImplementedError
     elif cfg.ARCH.SEARCHSPACE == 'GeneralizedFastSCNN':
+        if cfg.ARCH.SKIP_CONNECTION:
+            return SingleSidedSkipFeatureFusion(cfg, in_offset=in_offset, in_channels=in_channels, out_channels=out_channels, factor=factor)
         return SingleSidedAsymmetricFeatureFusion(cfg, in_channels, out_channels, factor)
     else:
         raise NotImplementedError
@@ -356,37 +379,42 @@ class SingleSidedAsymmetricFeatureFusion(nn.Module):
 
 
 class SingleSidedSkipFeatureFusion(nn.Module):
-    def __init__(self, cfg, in_offset, out_channels, factor):
-        super(SingleSidedAsymmetricFeatureFusion, self).__init__()
-        norm = get_nddr_bn(cfg)
+    def __init__(self, cfg, in_offset, in_channels, out_channels, factor):
+        super(SingleSidedSkipFeatureFusion, self).__init__()
         self.factor = factor
         self.in_offset = in_offset
+        self.num_features = in_offset * 2
+        self.in_channels = in_channels
         self.out_channels = out_channels
-        self.resample = []
+        self.factor = factor
+        self.resample = nn.ModuleList()
+        for idx in range(self.num_features):
+            if idx < self.in_offset:
+                self.resample.append(ResampleFeatureMap(
+                    in_channels=out_channels,
+                    out_channels=out_channels,
+                    reduction_ratio = 1,
+                    apply_bn=True
+                ))
+            else:
+                self.resample.append(ResampleFeatureMap(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    reduction_ratio = 1/factor,
+                    apply_bn=True
+                ))
 
-
-    def forward(self, features):
+    def forward(self, x: List[torch.Tensor]):
         """
         :param features: upstream feature maps
         :return:
         """
-        local_feature = self.localConv(features[0])
-        shared_features = features[1:]
-        size = local_feature.size()[2:]
-        channel = local_feature.size()[1]
-        
-        out = sum
+        nodes = []
+        for feature,resample in zip(x, self.resample):
+            nodes.append(resample(feature))
+        out = torch.stack(nodes, dim=-1)
+        out = torch.sum(out, dim=-1)
         
         return out
 
 
-class Swish(nn.Module):
-    def __init__(self, inplace=False):
-        super(Swish, self).__init__()
-        self.inplace = inplace
-
-    def forward(self, x):
-        if self.inplace:
-            return x.mul_(x.sigmoid())
-        else:
-            return x * x.sigmoid()

@@ -47,25 +47,29 @@ class GeneralizedFastSCNNNet(nn.Module):
         self.num_stages = len(self.net1.stages)
         self.net1_connectivity_matrix = net1_connectivity_matrix
         self.net2_connectivity_matrix = net2_connectivity_matrix
-        net1_shared_index = net1_connectivity_matrix.sum(axis=1)
-        net2_shared_index = net2_connectivity_matrix.sum(axis=1)
+        self.net1_skip_connectivity_matrix = net1_connectivity_matrix - np.eye(self.num_stages, dtype=int)
+        self.net2_skip_connectivity_matrix = net2_connectivity_matrix - np.eye(self.num_stages, dtype=int)
+        self.net1_shared_offset = net1_connectivity_matrix.sum(axis=1)
+        self.net2_shared_offset = net2_connectivity_matrix.sum(axis=1)
         net1_fusion_ops = []  # used for incoming feature fusion
         net2_fusion_ops = []  # used for incoming feature fusion
 
-        if is not cfg.ARCH.SKIP_CONNECTION:
+        if cfg.ARCH.SKIP_CONNECTION:
             for stage_id in range(self.num_stages):
-                n_channel = self.net1.stages[stage_id].out_channels
                 net1_op = get_nddr(cfg,
-                    128,  # +1 for original upstream input
-                    64, self.net1_net2_factor)
+                    128,
+                    64,
+                    self.net1_net2_factor,
+                    in_offset=self.net1_shared_offset[stage_id])
                 net2_op = get_nddr(cfg,
-                    64,  # +1 for original upstream input
-                    128, 1/self.net1_net2_factor)
+                    64,
+                    128,
+                    1/self.net1_net2_factor,
+                    in_offset=self.net1_shared_offset[stage_id])
                 net1_fusion_ops.append(net1_op)
                 net2_fusion_ops.append(net2_op)
         else:
             for stage_id in range(self.num_stages):
-                n_channel = self.net1.stages[stage_id].out_channels
                 net1_op = get_nddr(cfg,
                     128,  # +1 for original upstream input
                     64, self.net1_net2_factor)
@@ -130,6 +134,11 @@ class GeneralizedFastSCNNNet(nn.Module):
                 self.net1_alphas[np.nonzero(self.net1_connectivity_matrix)],
                 self.net2_alphas[np.nonzero(self.net2_connectivity_matrix)],
             ]
+            if self.cfg.ARCH.SKIP_CONNECTION: 
+                arch_parameters.extend([
+                    self.net1_skip_alphas[np.nonzero(self.net1_connectivity_matrix - np.eye(self.num_stages, dtype=int))],
+                    self.net2_skip_alphas[np.nonzero(self.net1_connectivity_matrix - np.eye(self.num_stages, dtype=int))],
+                ])
             if self.cfg.ARCH.ENTROPY_REGULARIZATION:
                 entropy_los = entropy_loss(arch_parameters)
                 entropy_weight = poly(start=0., end=self.cfg.ARCH.ENTROPY_REGULARIZATION_WEIGHT,
@@ -229,6 +238,12 @@ class GeneralizedFastSCNNNet(nn.Module):
             net1_path_weights = self.net1_alphas[stage_id][net1_path_ids]
             net2_path_weights = self.net2_alphas[stage_id][net2_path_ids]
 
+            if self.cfg.ARCH.SKIP_CONNECTION:
+                net1_skip_ids = np.nonzero(self.net1_skip_connectivity_matrix[stage_id])[0]
+                net2_skip_ids = np.nonzero(self.net2_skip_connectivity_matrix[stage_id])[0]
+                net1_skip_weights = self.net1_skip_alphas[stage_id][net1_skip_ids]
+                net2_skip_weights = self.net2_skip_alphas[stage_id][net2_skip_ids]
+
             # Calculating path strength based on weights
             if self.training:
                 if self.supernet:
@@ -262,9 +277,13 @@ class GeneralizedFastSCNNNet(nn.Module):
             if connectivity == 'gumbel':
                 net1_path_connectivity = self.gumbel_connectivity(net1_path_weights)
                 net2_path_connectivity = self.gumbel_connectivity(net2_path_weights)
+                net1_skip_connectivity = self.gumbel_connectivity(net1_skip_weights)
+                net2_skip_connectivity = self.gumbel_connectivity(net2_skip_weights)
             elif connectivity == 'sigmoid':
                 net1_path_connectivity = self.sigmoid_connectivity(net1_path_weights)
                 net2_path_connectivity = self.sigmoid_connectivity(net2_path_weights)
+                net1_skip_connectivity = self.sigmoid_connectivity(net1_skip_weights)
+                net2_skip_connectivity = self.sigmoid_connectivity(net2_skip_weights)
             elif connectivity == 'all':
                 net1_path_connectivity = self.all_connectivity(net1_path_weights)
                 net2_path_connectivity = self.all_connectivity(net2_path_weights)
@@ -275,6 +294,8 @@ class GeneralizedFastSCNNNet(nn.Module):
                 assert connectivity == 'onehot'
                 net1_path_connectivity = self.onehot_connectivity(net1_path_weights)
                 net2_path_connectivity = self.onehot_connectivity(net2_path_weights)
+                net1_skip_connectivity = self.onehot_connectivity(net1_skip_weights)
+                net2_skip_connectivity = self.onehot_connectivity(net2_skip_weights)
                 
             if isinstance(x, list):
                 net1_fusion_input = [x[0]]
@@ -282,6 +303,12 @@ class GeneralizedFastSCNNNet(nn.Module):
             else:
                 net1_fusion_input = [x]
                 net2_fusion_input = [y]
+            
+            if self.cfg.ARCH.SKIP_CONNECTION:
+                for idx, input_id in enumerate(net1_skip_ids):
+                    net1_fusion_input.append(net1_skip_connectivity[idx]*xs[input_id])
+                for idx, input_id in enumerate(net2_skip_ids):
+                    net2_fusion_input.append(net2_skip_connectivity[idx]*ys[input_id])
                 
             for idx, input_id in enumerate(net1_path_ids):
                 net1_fusion_input.append(net1_path_connectivity[idx]*ys[input_id])

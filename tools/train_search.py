@@ -30,7 +30,7 @@ from segmentron.utils.default_setup import default_setup
 from segmentron.utils.visualize import show_flops_params
 from segmentron.config import cfg
 from tensorboardX import SummaryWriter
-from segmentron.core.utils.visualization import process_image, save_heatmap, save_connectivity
+from segmentron.core.utils.visualization import process_image, save_heatmap, save_connectivity, save_skip_connectivity
 
 class Trainer(object):
     def __init__(self, args):
@@ -211,10 +211,11 @@ class Trainer(object):
                 save_checkpoint(self.model, epoch, self.optimizer, self.arch_optimizer, self.lr_scheduler, self.arch_lr_scheduler, is_best=False)
                 writer.add_scalar('Train/train_loss', losses_reduced.item(), epoch)
                 writer.add_scalar('Train/search_loss', arch_losses_reduced, epoch)
-                if cfg.ARCH.SEARCHSPACE == 'GeneralizedFastSCNN' and epoch > cfg.ARCH.SEARCH_EPOCH:
+                if cfg.ARCH.SEARCHSPACE == 'GeneralizedFastSCNN' and epoch > cfg.ARCH.SEARCH_EPOCH and epoch < cfg.VISUAL.IMAGE_EPOCH:
                     writer.add_scalar('temperature', self.model.get_temperature(), epoch)
                     alpha1 = torch.sigmoid(self.model.net1_alphas).detach().cpu().numpy()
                     alpha2 = torch.sigmoid(self.model.net2_alphas).detach().cpu().numpy()
+                    
                     alpha1_path = os.path.join(cfg.TRAIN.LOG_SAVE_DIR, 'alpha1')
                     if not os.path.isdir(alpha1_path):
                         os.makedirs(alpha1_path)
@@ -223,22 +224,45 @@ class Trainer(object):
                         os.makedirs(alpha2_path)
                     heatmap1 = save_heatmap(alpha1, os.path.join(alpha1_path, "%s_alpha1.png"%str(epoch).zfill(5)),save=True)
                     heatmap2 = save_heatmap(alpha2, os.path.join(alpha2_path, "%s_alpha2.png"%str(epoch).zfill(5)),save=True)
-                    # writer.add_image('alpha/net1', heatmap1, epoch)
-                    # writer.add_image('alpha/net2', heatmap2, epoch)
                     writer.add_image('alpha/net1', heatmap1, epoch)
                     writer.add_image('alpha/net2', heatmap2, epoch)
+                    if cfg.ARCH.SKIP_CONNECTION:
+                        skip_alpha1_path = os.path.join(cfg.TRAIN.LOG_SAVE_DIR, 'skip_alpha1')
+                        if not os.path.isdir(skip_alpha1_path):
+                            os.makedirs(skip_alpha1_path)
+                        skip_alpha2_path = os.path.join(cfg.TRAIN.LOG_SAVE_DIR, 'skip_alpha2')
+                        if not os.path.isdir(skip_alpha2_path):
+                            os.makedirs(skip_alpha2_path)
+                        skip_alpha1 = torch.sigmoid(self.model.net1_skip_alphas).detach().cpu().numpy()
+                        skip_alpha2 = torch.sigmoid(self.model.net2_skip_alphas).detach().cpu().numpy()
+                        skip_heatmap1 = save_heatmap(skip_alpha1, os.path.join(skip_alpha1_path, "%s_skip_alpha1.png"%str(epoch).zfill(5)),save=True)
+                        skip_heatmap2 = save_heatmap(skip_alpha2, os.path.join(skip_alpha2_path, "%s_skip_alpha2.png"%str(epoch).zfill(5)),save=True)
+                        writer.add_image('skip_alpha/net1', skip_heatmap1, epoch)
+                        writer.add_image('skip_alpha/net2', skip_heatmap2, epoch)
+
                     network_path = os.path.join(cfg.TRAIN.LOG_SAVE_DIR, 'network')
                     if not os.path.isdir(network_path):
                         os.makedirs(network_path)
-                    connectivity_plot = save_connectivity(alpha1, alpha2,
+                    if not cfg.ARCH.SKIP_CONNECTION:
+                        connectivity_plot = save_connectivity(alpha1, alpha2,
                                                           self.model.net1_connectivity_matrix,
                                                           self.model.net2_connectivity_matrix,
                                                           os.path.join(network_path, "%s_network.png" %str(epoch).zfill(5)),
                                                           save=True
                                                          )
+                    else:
+                        connectivity_plot = save_skip_connectivity(alpha1, alpha2,
+                                                          self.model.net1_connectivity_matrix,
+                                                          self.model.net2_connectivity_matrix,
+                                                          skip_alpha1, skip_alpha2,
+                                                          self.model.net1_skip_connectivity_matrix,
+                                                          self.model.net2_skip_connectivity_matrix,
+                                                          os.path.join(network_path, "%s_network.png" %str(epoch).zfill(5)),
+                                                          save=True
+                                                         )
                     writer.add_image('network', connectivity_plot, epoch)
 
-            if not self.args.skip_val and iteration % val_per_iters == 0 and epoch > cfg.ARCH.SEARCH_EPOCH:
+            if not self.args.skip_val and iteration % val_per_iters == 0 and epoch > cfg.ARCH.SEARCH_EPOCH and epoch > cfg.TRAIN.VAL_EPOCH:
                 self.validation(epoch)
                 self.model.train()
 

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from ..models.common_layers import Stage
 from ..config import cfg
-from ..models.common_layers import Swish
+from ..models.common_layers import SeparableConv2d
 
 def get_fusion_net(net1_dim=64, net2_dim=128, net1_net2_factor=4):
     net1 = BranchNet(64, 64)
@@ -17,28 +17,16 @@ class BranchNet(nn.Module):
         self.stages = []
         layers = []
         stages = [
-            (in_dim, [
-                nn.Conv2d(in_dim, in_dim, kernel_size=3, stride=1,padding=1, groups=in_dim, bias=False),
-                nn.Conv2d(in_dim, in_dim, kernel_size=1, stride=1,padding=0, bias=False),
-                nn.BatchNorm2d(in_dim),
-                Swish()
-            ]),
-            (in_dim, [
-                nn.Conv2d(in_dim, in_dim, kernel_size=3, stride=1,padding=1, groups=in_dim, bias=False),
-                nn.Conv2d(in_dim, in_dim, kernel_size=1, stride=1,padding=0, bias=False),
-                nn.BatchNorm2d(in_dim),
-                Swish()
-            ]),
-            (out_dim, [
-                nn.Conv2d(in_dim, in_dim, kernel_size=3, stride=1,padding=1, groups=in_dim, bias=False),
-                nn.Conv2d(in_dim, out_dim, kernel_size=1, stride=1,padding=0, bias=False),
-                nn.BatchNorm2d(out_dim),
-                Swish()
-            ]),
+            (in_dim, SeparableConv2d(in_dim, in_dim)),
+            (in_dim, SeparableConv2d(in_dim, in_dim)),
+            (out_dim, SeparableConv2d(in_dim, in_dim)),
         ]
 
         for channels, stage in stages:
-            layers += stage
+            if isinstance(stage, list):
+                layers.extend(stage)
+            else:
+                layers.append(stage)
             self.stages.append(Stage(channels, stage))
         self.stages = nn.ModuleList(self.stages)
 

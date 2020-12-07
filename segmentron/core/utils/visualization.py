@@ -199,6 +199,59 @@ def save_connectivity(net1, net2, connectivity1, connectivity2, filename, align=
     else:
         return fig
 
+def save_skip_connectivity(net1, net2, connectivity1, connectivity2, net1_skip, net2_skip, connectivity1_skip, connectivity2_skip, filename, align='horizontal', with_labels=False, save=True):
+    num_stages = net1.shape[0]
+    G = nx.DiGraph()
+    G.add_nodes_from([("1_%d" % i, dict(label=i)) for i in range(num_stages)], task=0, color='xkcd:azure')
+    G.add_nodes_from([("2_%d" % i, dict(label=i)) for i in range(num_stages)], task=1, color='xkcd:tomato')
+
+    paths1 = list(zip(*np.nonzero(connectivity1)))
+    paths2 = list(zip(*np.nonzero(connectivity2)))
+    skips1 = list(zip(*np.nonzero(connectivity1_skip)))
+    skips2 = list(zip(*np.nonzero(connectivity2_skip)))
+
+    pos_edges_2_to_1 = [("2_%d" % s, "1_%d" % t, dict(value=net1[t, s])) for t, s in paths1 if net1[t, s] > 0.5]
+    pos_edges_1_to_2 = [("1_%d" % s, "2_%d" % t, dict(value=net2[t, s])) for t, s in paths2 if net2[t, s] > 0.5]
+    neg_edges_2_to_1 = [("2_%d" % s, "1_%d" % t, dict(value=net1[t, s])) for t, s in paths1 if net1[t, s] <= 0.5]
+    neg_edges_1_to_2 = [("1_%d" % s, "2_%d" % t, dict(value=net2[t, s])) for t, s in paths2 if net2[t, s] <= 0.5]
+    pos_skips_1_to_1 = [("1_%d" % s, "1_%d" % t, dict(value=net1[t, s])) for t, s in skips1 if net1_skip[t, s] > 0.5]
+    pos_skips_2_to_2 = [("2_%d" % s, "2_%d" % t, dict(value=net2[t, s])) for t, s in skips2 if net2_skip[t, s] > 0.5]
+    neg_skips_1_to_1 = [("1_%d" % s, "1_%d" % t, dict(value=net1[t, s])) for t, s in skips1 if net1_skip[t, s] <= 0.5]
+    neg_skips_2_to_2 = [("2_%d" % s, "2_%d" % t, dict(value=net2[t, s])) for t, s in skips2 if net2_skip[t, s] <= 0.5]
+
+    pos_edges = pos_edges_2_to_1 + pos_edges_1_to_2
+    neg_edges = neg_edges_2_to_1 + neg_edges_1_to_2
+    pos_skips = pos_skips_1_to_1 + pos_skips_2_to_2
+    neg_skips = neg_skips_1_to_1 + neg_skips_2_to_2
+
+    G.add_edges_from([("1_%d" % i, "1_%d" % (i + 1)) for i in range(num_stages - 1)], color='xkcd:black')
+    G.add_edges_from([("2_%d" % i, "2_%d" % (i + 1)) for i in range(num_stages - 1)], color='xkcd:black')
+
+    top = {n for n, d in G.nodes(data=True) if d['task'] == 0}
+    pos = task_layout(G, top, align=align)
+
+    figsize = (1.5, num_stages / 2.) if align == 'vertical' else (num_stages / 2., 1.5)
+    fig = plt.figure(num=0, figsize=figsize)
+    fig.clf()
+
+    labels = {n: d['label'] for n, d in G.nodes(data=True)}
+    node_color = [d['color'] for _, d in G.nodes(data=True)]
+    edge_color = [d['color'] for _, _, d in G.edges(data=True)]
+    nx.draw(G, pos=pos, labels=labels, node_color=node_color, edge_color=edge_color, with_labels=with_labels)
+    nx.draw_networkx_edges(G, pos=pos, connectionstyle='arc3, rad = 0.1',edgelist=pos_edges, edge_color='xkcd:violet')
+    nx.draw_networkx_edges(G, pos=pos, connectionstyle='arc3, rad = 0.1',edgelist=neg_edges, edge_color='xkcd:silver')
+    nx.draw_networkx_edges(G, pos=pos, connectionstyle='arc3, rad = 0.1',edgelist=pos_skips, edge_color='xkcd:violet')
+    arcs = nx.draw_networkx_edges(G, pos=pos, connectionstyle='arc3, rad = 0.1',edgelist=neg_skips, edge_color='xkcd:silver')
+    if arcs is not None:
+        for arc in arcs:
+            arc.set_linestyle('dotted')
+    if save:
+        plt.savefig(filename)
+        img = Image.open(filename)
+        return np.array(img).transpose((2, 0, 1))
+    else:
+        return fig
+
 
 if __name__ == '__main__':
     from ..models.stagewise_search import vgg_stage_wise_connectivity_matrix_cross_task

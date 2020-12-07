@@ -19,6 +19,10 @@ def depth_limited_connectivity_matrix(stage_config, limit=3):
 
 
 out = depth_limited_connectivity_matrix([3])
-print(out)
-print(out.sum(axis=1))
-print(np.nonzero(out))
+skip = out - np.eye(3,dtype=int)
+# print(out)
+# print(out.shape)
+# print(out.sum(axis=1))
+print(np.nonzero(out[1]))
+print(skip)
+print(np.nonzero(skip[0]))

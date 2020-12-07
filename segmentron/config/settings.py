@@ -62,10 +62,9 @@ cfg.TRAIN.SYNC_BATCH_NORM = True
 # save model every checkpoint-epoch
 cfg.TRAIN.SNAPSHOT_EPOCH = 10
 
-# cfg.TRAIN.LR = 0.001
 cfg.TRAIN.NDDR_FACTOR = 100.
-# cfg.TRAIN.WARMUP = 0
-# cfg.TRAIN.MOMENTUM = 0.9
+
+cfg.TRAIN.VAL_EPOCH = 0
 
 ########################### architecture search config ##################################
 # cfg.ARCH = CN()
@@ -147,6 +146,7 @@ cfg.TEST.FLIP = False
 ########################## visual config ###########################################
 # visual result output dir
 cfg.VISUAL.OUTPUT_DIR = '../runs/visual/'
+cfg.VISUAL.IMAGE_EPOCH = 300
 
 ########################## model #######################################
 # model name
