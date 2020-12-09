@@ -145,8 +145,9 @@ class Trainer(object):
             epoch = iteration // iters_per_epoch + 1
             iteration += 1
 
+            arch_losses_reduced = 0
             # arch search
-            if epoch > cfg.ARCH.SEARCH_EPOCH:
+            if epoch > cfg.ARCH.SEARCH_EPOCH and epoch <= cfg.ARCH.SEARCH_EPOCH_END:
                 val_batch = next(val_iter, None)
                 if val_batch is None:  # val_iter has reached its end
                     # val_sampler.set_epoch(epoch) ???
@@ -170,8 +171,6 @@ class Trainer(object):
                 self.arch_optimizer.step()
                 # self.arch_lr_scheduler.step()
                 self.model.arch_eval()
-            else:
-                arch_losses_reduced = 0
 
             assert not self.model.arch_training
             images = images.to(self.device)
@@ -211,7 +210,7 @@ class Trainer(object):
                 save_checkpoint(self.model, epoch, self.optimizer, self.arch_optimizer, self.lr_scheduler, self.arch_lr_scheduler, is_best=False)
                 writer.add_scalar('Train/train_loss', losses_reduced.item(), epoch)
                 writer.add_scalar('Train/search_loss', arch_losses_reduced, epoch)
-                if cfg.ARCH.SEARCHSPACE == 'GeneralizedFastSCNN' and epoch > cfg.ARCH.SEARCH_EPOCH and epoch < cfg.VISUAL.IMAGE_EPOCH:
+                if cfg.ARCH.SEARCHSPACE == 'GeneralizedFastSCNN' and epoch > cfg.ARCH.SEARCH_EPOCH and epoch <= cfg.VISUAL.IMAGE_EPOCH:
                     writer.add_scalar('temperature', self.model.get_temperature(), epoch)
                     alpha1 = torch.sigmoid(self.model.net1_alphas).detach().cpu().numpy()
                     alpha2 = torch.sigmoid(self.model.net2_alphas).detach().cpu().numpy()
